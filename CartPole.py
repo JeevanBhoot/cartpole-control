@@ -23,7 +23,7 @@ def _remap_angle(theta):
 ## loss function given a state vector. the elements of the state vector are
 ## [cart location, cart velocity, pole angle, pole angular velocity]
 def _loss(state):
-    sig = 0.5
+    sig = 10
     return 1-np.exp(-np.dot(state,state)/(2.0 * sig**2))
 
 def loss(state):

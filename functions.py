@@ -254,7 +254,7 @@ def generate_data(n, train_prop=0.8, remap__angle=False, action_flag=False):
     y_train, y_test = y_stack[:int(n*train_prop)], y_stack[int(n*train_prop):] #and testing
     return np.array(x_train), np.array(y_train), np.array(x_test), np.array(y_test)
 
-def create_initialStates(n):
+def create_initialStates(n, action_flag=False):
     """
     Create a set of initial states.
     First two states are already specificed (first is stable equilibrium)
@@ -264,6 +264,7 @@ def create_initialStates(n):
     for i in range(n):
         initial_states.append([np.random.normal(loc=0, scale=1.5), np.random.uniform(-10, 10),
                             np.random.uniform(-np.pi, np.pi), np.random.uniform(-15, 15)])
+
     return initial_states
 
 def plot_ModelVsTrue_OverTime(steps, initial_states, model):
@@ -501,7 +502,7 @@ def plot_model_contours(initial_state, ranges, nonlinear_model):
                 axs[k].set_ylabel(labels[i])
         plt.subplots_adjust(wspace=0.4)
 
-def plot_ModelVsTrue_OverTime2(steps, initial_states, nonlinear_model):
+def plot_ModelVsTrue_OverTime2(steps, initial_states, nonlinear_model, action=0):
     """
     Plot true and predicted time evolutions (dynamics) of the cart-pole system
     for a range of given initial states.
@@ -510,9 +511,11 @@ def plot_ModelVsTrue_OverTime2(steps, initial_states, nonlinear_model):
     for i in range(len(initial_states)):
         initial_state = initial_states[i]
         pred_states, initial_state_copy = initial_state.copy(), initial_state.copy()
-        true_states = simulate(initial_state=initial_state, steps=steps, remap__angle=True) #Simulate for n steps
-        for step in range(steps): #Predict n times using given model, starting from initial state
+        true_states = simulate(initial_state=initial_state, steps=steps, remap__angle=True, action=action) #Simulate for n steps
+        for _ in range(steps): #Predict n times using given model, starting from initial state
             initial_state_copy[2] = remap_angle(initial_state_copy[2])
+            if action != 0:
+                initial_state_copy.append(action)
             preds, preds_final = get_preds(np.array([initial_state_copy]), kernel_centres, sigma, alphas)
             next_pred = [0, 0, 0, 0]
             for i in range(4):
@@ -592,10 +595,10 @@ def plot_y_diff2(initial_state, initial_force, ranges, linear_model=None, nonlin
             axs.plot(ranges[i], pred_ang, 'r--', label=label3x)
             axs.plot(ranges[i], pred_pol_vel, 'y--', label=label4x)
         if nonlinear_model:
-            axs.plot(ranges[i], pred_pos2, 'b:', label=label1x)
-            axs.plot(ranges[i], pred_vel2, 'g:', label=label2x)
-            axs.plot(ranges[i], pred_ang2, 'r:', label=label3x)
-            axs.plot(ranges[i], pred_pol_vel2, 'y:', label=label4x)
+            axs.plot(ranges[i], pred_pos2, 'b:', label=label1y)
+            axs.plot(ranges[i], pred_vel2, 'g:', label=label2y)
+            axs.plot(ranges[i], pred_ang2, 'r:', label=label3y)
+            axs.plot(ranges[i], pred_pol_vel2, 'y:', label=label4y)
         axs.set_facecolor((0.1, 0.1, 0.1))
         axs.grid()
     fig.legend(loc='upper center', bbox_to_anchor=(0.5, 1), ncol=2)
