@@ -8,7 +8,8 @@ def simulate(steps=1, initial_state=[0, 0, np.pi, 0], action=0, remap__angle=Fal
     """
     Simulate the cartpole system for a number of specificed steps from a specified initial state.
     Returning an array containing all the states (at each step), including the initial state.
-    noise = fraction of signal 
+    noise = fraction of signal
+    Noise can be added to the observed state.
     """
     cp = CartPole() #Create CartPole object
     cp.setState(initial_state) #Initialise CartPole object with given initial state
@@ -21,6 +22,32 @@ def simulate(steps=1, initial_state=[0, 0, np.pi, 0], action=0, remap__angle=Fal
         current_state = cp.getState() #Find state after one performAction
         if noise_frac != 0:
             current_state += np.random.normal(0, [1.5, np.sqrt(1/12)*20, np.sqrt(1/12)*2*np.pi, np.sqrt(1/12)*30]) * noise_frac
+        states = np.vstack((states, current_state)) #Create stacked array with state after each performAction
+    return states
+
+def simulate_dynamicnoise(steps=1, initial_state=[0, 0, np.pi, 0], action=0, remap__angle=False, noise_frac=0):
+    """
+    Simulate the cartpole system for a number of specificed steps from a specified initial state.
+    Returning an array containing all the states (at each step), including the initial state.
+    noise = fraction of signal
+    Here noise is not added to the observed state, but added to the dynamics of the cart pole,
+    specifically the cart and pole velocities, which feed into the accelerations and positions.
+    The accelerations feed back into the velocities.
+    """
+    if noise_frac != 0:
+        noise = True
+    else:
+        noise = False
+    cp = CartPole(noise=noise, noise_frac=noise_frac) #Create CartPole object
+    cp.setState(initial_state) #Initialise CartPole object with given initial state
+    states = initial_state.copy() #Create copy of initial state array
+    
+    for step in range(steps): #PerformAction for a given number of steps
+        cp.performAction(action)
+        if remap__angle: #remap the angles to range [-pi, pi] if True
+            cp.remap_angle()
+        current_state = cp.getState() #Find state after one performAction
+
         states = np.vstack((states, current_state)) #Create stacked array with state after each performAction
     return states
 
@@ -248,6 +275,32 @@ def generate_data(n, train_prop=0.8, remap__angle=False, action_flag=False, nois
         initial_state = [np.random.normal(loc=0, scale=1.5), np.random.uniform(-10, 10),
                         np.random.uniform(-np.pi, np.pi), np.random.uniform(-15, 15)] #Create random initial state
         x1 = simulate(initial_state=initial_state, remap__angle=remap__angle, action=action, noise_frac=noise_frac)[1] #Obtain state after one step
+        y = x1 - np.array(initial_state) # y = change in state
+        if action_flag:
+            initial_state.append(action)
+        x_stack.append(initial_state)
+        y_stack.append(y)
+    x_train, x_test = x_stack[:int(n*train_prop)], x_stack[int(n*train_prop):] #Split into proportion for training
+    y_train, y_test = y_stack[:int(n*train_prop)], y_stack[int(n*train_prop):] #and testing
+    return np.array(x_train), np.array(y_train), np.array(x_test), np.array(y_test)
+
+def generate_data_dynamicnoise(n, train_prop=0.8, remap__angle=False, action_flag=False, noise_frac=0):
+    """
+    Generate n data points for training and testing a predictive model.
+    The proportion of data set aside for training is set by train_prop (default = 80%)
+    The input (x) is a random initial state.
+    The output (y) is the change in state after a singular step.
+    """
+    x_stack = []
+    y_stack = []
+    for i in range(n):
+        if action_flag:
+            action = np.random.uniform(-20, 20)
+        else:
+            action = 0
+        initial_state = [np.random.normal(loc=0, scale=1.5), np.random.uniform(-10, 10),
+                        np.random.uniform(-np.pi, np.pi), np.random.uniform(-15, 15)] #Create random initial state
+        x1 = simulate_dynamicnoise(initial_state=initial_state, remap__angle=remap__angle, action=action, noise_frac=noise_frac)[1] #Obtain state after one step
         y = x1 - np.array(initial_state) # y = change in state
         if action_flag:
             initial_state.append(action)
@@ -613,3 +666,222 @@ def plot_y_diff2(initial_state, initial_force, ranges, linear_model=None, nonlin
     axs.set_xlabel('Initial Value of Force')
     axs1.set_ylabel('Y = X(1) - X(0)')
     axs6.set_visible(False)
+
+def plot_loss_rollout(steps, initial_state, action=0, plot_states=False):
+    losses = []
+    total_loss = []
+    losses.append(loss(initial_state))
+    total_loss.append(loss(initial_state))
+    states = initial_state.copy()
+    for i in range(steps):
+        #If action, same action used at each step.
+        next_state = simulate(steps=1, initial_state=initial_state, action=action)[1]
+        initial_state = next_state
+        losses.append(loss(next_state))
+        total_loss.append(loss(next_state) + total_loss[i])
+        states = np.vstack((states, next_state))
+    fig, ((axs)) = plt.subplots(1, 1, figsize=(6, 4))
+    axs.plot(range(steps+1), losses, label='Loss at each step')
+    axs.plot(range(steps+1), total_loss, label='Total loss of trajectory')
+    axs.legend()
+    axs.set_ylabel('Loss')
+    axs.set_xlabel('Steps')
+    axs.set_facecolor((0.1, 0.1, 0.1))
+    axs.grid()
+    if plot_states:
+        display_plots(states)
+
+def policy(p, X):
+    return np.dot(p, X)
+
+def plot_policy_scans(initial_p, initial_state, policy_range):
+    fig, ((axs1, axs2, axs3, axs4)) = plt.subplots(1, 4, figsize=(16, 4))
+    for i, axs in enumerate([axs1, axs2, axs3, axs4]):
+        losses = []
+        for val in policy_range:
+            p = initial_p.copy()
+            p[i] = val
+            p_X = policy(p, initial_state)
+            next_state = simulate(steps=1, initial_state=initial_state, action=p_X)[1]
+            losses.append(loss(next_state))
+        axs.plot(policy_range, losses)
+        axs.set_ylabel('Loss after one step')
+        axs.set_xlabel('Value of p_' + str(i))
+        axs.set_facecolor((0.1, 0.1, 0.1))
+        axs.grid()
+    plt.subplots_adjust(wspace=0.35)
+
+def plot_policy_contours(initial_p, initial_state, policy_range, index_pairs, steps=1):
+    fig, ((axs1, axs2, axs3), (axs4, axs5, axs6)) = plt.subplots(2, 3, figsize=(14, 8))
+    for x, axs in enumerate([axs1, axs2, axs3, axs4, axs5, axs6]):
+        index = index_pairs[x]
+        i, j = index[0], index[1]
+        grid = np.zeros((len(policy_range), len(policy_range)))
+        for k, val1 in enumerate(policy_range): #Scan over the two specified parameters
+            for l, val2 in enumerate(policy_range):
+                p = initial_p.copy()
+                p[i] = val1
+                p[j] = val2
+                loss_ = 0
+                initial_state_copy = initial_state.copy()
+                for _ in range(steps):
+                    p_X = policy(p, initial_state)
+                    next_state = simulate(steps=1, initial_state=initial_state_copy, action=p_X)[1]
+                    loss_ += loss(next_state)
+                    initial_state_copy = next_state
+                grid[k][l] = loss_
+        cs = axs.contourf(policy_range, policy_range, grid, cmap='plasma')
+        axs.set_xlabel('p_' + str(i))
+        axs.set_ylabel('p_' + str(j))
+        fig.colorbar(cs, ax=axs)
+    plt.subplots_adjust(wspace=0.35, hspace=0.3)
+
+def training_loss(p, initial_state, steps=20):
+    loss_ = 0
+    initial_state_copy = initial_state.copy()
+    for _ in range(steps):
+        p_X = policy(p, initial_state_copy)
+        next_state = simulate(steps=1, initial_state=initial_state_copy, action=p_X)[1]
+        loss_ += loss(next_state)
+        initial_state_copy = next_state
+    return loss_
+
+def objective_function(p, initial_state):
+    return training_loss(p, initial_state)
+
+def train_policy(initial_state, n):
+    """
+    Train linear policy to achieve [0, 0, 0, 0] from given initial state.
+    Finds policy [p_0, p_1, p_2, p_3] which minimises loss.
+    Start from a random initial p.
+    Attempt n times from different settings of initial p, to find a good optimum.
+    Returns results from each trial.
+    """
+    losses = []
+    initial_ps = []
+    opt_ps = []
+    for _ in range(n):
+        initial_p = [np.random.uniform(-25, 25), np.random.uniform(-25, 25),
+                    np.random.uniform(-25, 25), np.random.uniform(-25, 25)]
+        initial_ps.append(initial_p)
+        opt_p = scipy.optimize.minimize(objective_function, initial_p, args=(initial_state), method='Nelder-Mead')['x']
+        opt_ps.append(opt_p)
+        losses.append(objective_function(opt_p, initial_state))
+    return losses, initial_ps, opt_ps
+
+def train_policy2(initial_state, n, objective_function):
+    """
+    Train linear policy to achieve [0, 0, 0, 0] from given initial state.
+    Finds policy [p_0, p_1, p_2, p_3] which minimises loss.
+    Start from a random initial p.
+    Attempt n times from different settings of initial p, to find a good optimum.
+    Only returns the best policy.
+    """
+    opt_p = [0, 0, 0, 0]
+    best_loss = objective_function(opt_p, initial_state)
+    for _ in range(n):
+        initial_p = [np.random.uniform(-25, 25), np.random.uniform(-25, 25),
+                    np.random.uniform(-25, 25), np.random.uniform(-25, 25)]
+        p = scipy.optimize.minimize(objective_function, initial_p, args=(initial_state), method='Nelder-Mead')['x']
+        if objective_function(p, initial_state) < best_loss:
+            best_loss = objective_function(p, initial_state)
+            opt_p = p
+    return opt_p, best_loss
+
+def model_predictive_control_loss(p, initial_state, nonlinear_model, steps=20):
+    alphas, kernel_centres, sigma = nonlinear_model[0], nonlinear_model[1], nonlinear_model[2]
+    loss_ = 0
+    initial_state_copy = initial_state.copy()
+    for _ in range(steps):
+        p_X = policy(p, initial_state_copy)
+        initial_state_copy.append(p_X)
+        preds, preds_final = get_preds(np.array([initial_state_copy]), kernel_centres, sigma, alphas)
+        next_state = []
+        for i in preds_final:
+            next_state.append(i[0])
+        loss_ += loss(next_state)
+        initial_state_copy = next_state
+    return loss_
+
+def mpc_objective_function(p, initial_state, nonlinear_model):
+    return model_predictive_control_loss(p, initial_state, nonlinear_model)
+
+def get_policy_true_pred_states(p_opt, initial_state, nonlinear_model):
+    initial_state_copy = initial_state.copy()
+    true_states = initial_state.copy()
+    pred_states = initial_state.copy()
+    alphas, kernel_centres, sigma = nonlinear_model[0], nonlinear_model[1], nonlinear_model[2]
+
+    for _ in range(20):
+        p_X = policy(p_opt, initial_state_copy)
+        next_true_state = simulate(steps=1, initial_state=initial_state_copy, action=p_X)[1]
+        initial_state_copy.append(p_X)
+        preds, preds_final = get_preds(np.array([initial_state_copy]), kernel_centres, sigma, alphas)
+        next_state = []
+        for i in preds_final:
+            next_state.append(i[0])
+        true_states = np.vstack((true_states, next_true_state))
+        pred_states = np.vstack((pred_states, next_state))
+        initial_state_copy = next_state
+    return true_states, pred_states
+
+def plot_set_of_states(set_of_states, labels):
+    fig, axs = plt.subplots(1, 4, figsize=(16, 4))
+    for i, states in enumerate(set_of_states):
+        positions = states[:,0]
+        velocities = states[:,1]
+        angles = states[:,2]
+        pole_vels = states[:,3]
+
+        time = range(len(states))
+
+        axs[0].plot(time, positions, label=labels[i])
+        axs[1].plot(time, velocities)
+        axs[2].plot(time, angles)
+        axs[3].plot(time, pole_vels)
+
+
+        axs[0].set_ylabel('Cart Location')
+        axs[1].set_ylabel('Cart Velocity')
+        axs[2].set_ylabel('Pole Angle')
+        axs[3].set_ylabel('Pole Velocity')
+
+    for i in range(4):
+            axs[i].set_xlabel('Steps')
+            axs[i].set_facecolor((0.1, 0.1, 0.1))
+            axs[i].grid()
+    plt.subplots_adjust(wspace=0.45)
+    fig.legend(loc='upper center', bbox_to_anchor=(0.5, 1), ncol=2)
+
+def noisy_training_loss(p, initial_state, steps=20, noise_frac=0.05):
+    loss_ = 0
+    initial_state_copy = initial_state.copy()
+    for _ in range(steps):
+        p_X = policy(p, initial_state_copy)
+        next_state = simulate(steps=1, initial_state=initial_state_copy, action=p_X, noise_frac=noise_frac)[1]
+        loss_ += loss(next_state)
+        initial_state_copy = next_state
+    return loss_
+
+def noisy_objective_function(p, initial_state, noise_frac=0.05):
+    return noisy_training_loss(p, initial_state, noise_frac=noise_frac)
+
+def get_policy_true_noisy_states(p_opt, initial_state, noise_fract, dynamic=False):
+    """Policy applied to noisy observed states.
+    Also obtain the true states.
+    """
+    initial_state_copy = initial_state.copy()
+    true_states = initial_state.copy()
+    noisy_states = initial_state.copy()
+
+    for _ in range(20):
+        p_X = policy(p_opt, initial_state_copy)
+        next_true_state = simulate(steps=1, initial_state=initial_state_copy, action=p_X)[1]
+        if dynamic:
+            next_noisy_state = simulate_dynamicnoise(steps=1, initial_state=initial_state_copy, action=p_X, noise_frac=noise_fract)[1]
+        else:
+            next_noisy_state = simulate(steps=1, initial_state=initial_state_copy, action=p_X, noise_frac=noise_fract)[1]
+        true_states = np.vstack((true_states, next_true_state))
+        noisy_states = np.vstack((noisy_states, next_noisy_state))
+        initial_state_copy = next_noisy_state
+    return true_states, noisy_states

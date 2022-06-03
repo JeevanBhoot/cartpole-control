@@ -40,12 +40,14 @@ class CartPole:
     of round off errors that cause the oscillations to grow until it eventually falls.
     """
 
-    def __init__(self, visual=False):
+    def __init__(self, visual=False, noise=False, noise_frac=0.05):
         self.cart_location = 0.0
         self.cart_velocity = 0.0
         self.pole_angle = np.pi    # angle is defined to be zero when the pole is upright, pi when hanging vertically down
         self.pole_velocity = 0.0
         self.visual = visual
+        self.noise = noise
+        self.noise_frac = noise_frac
 
         # Setup pole lengths and masses based on scale of each pole
         # (Papers using multi-poles tend to have them either same lengths/masses
@@ -91,6 +93,10 @@ class CartPole:
 
         # integrate forward the equations of motion using the Euler method
         for step in range(self.sim_steps):
+            if self.noise:
+                self.cart_velocity += np.random.normal(0, np.sqrt(1/12)*20) * self.noise_frac
+                self.pole_velocity += np.random.normal(0, np.sqrt(1/12)*30) * self.noise_frac
+
             s = np.sin(self.pole_angle)
             c = np.cos(self.pole_angle)
             m = 4.0*(self.cart_mass+self.pole_mass)-3.0*self.pole_mass*(c**2)
