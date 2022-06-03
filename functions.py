@@ -4,10 +4,11 @@ import matplotlib.pyplot as plt
 from sklearn import linear_model
 from sklearn.metrics import mean_squared_error as mse
 
-def simulate(steps=1, initial_state=[0, 0, np.pi, 0], action=0, remap__angle=False):
+def simulate(steps=1, initial_state=[0, 0, np.pi, 0], action=0, remap__angle=False, noise_frac=0):
     """
     Simulate the cartpole system for a number of specificed steps from a specified initial state.
     Returning an array containing all the states (at each step), including the initial state.
+    noise = fraction of signal 
     """
     cp = CartPole() #Create CartPole object
     cp.setState(initial_state) #Initialise CartPole object with given initial state
@@ -18,6 +19,8 @@ def simulate(steps=1, initial_state=[0, 0, np.pi, 0], action=0, remap__angle=Fal
         if remap__angle: #remap the angles to range [-pi, pi] if True
             cp.remap_angle()
         current_state = cp.getState() #Find state after one performAction
+        if noise_frac != 0:
+            current_state += np.random.normal(0, [1.5, np.sqrt(1/12)*20, np.sqrt(1/12)*2*np.pi, np.sqrt(1/12)*30]) * noise_frac
         states = np.vstack((states, current_state)) #Create stacked array with state after each performAction
     return states
 
@@ -228,7 +231,7 @@ def plot_contours(initial_state, ranges):
                 axs[k].set_ylabel(labels[i])
         plt.subplots_adjust(wspace=0.4)
 
-def generate_data(n, train_prop=0.8, remap__angle=False, action_flag=False):
+def generate_data(n, train_prop=0.8, remap__angle=False, action_flag=False, noise_frac=0):
     """
     Generate n data points for training and testing a predictive model.
     The proportion of data set aside for training is set by train_prop (default = 80%)
@@ -244,7 +247,7 @@ def generate_data(n, train_prop=0.8, remap__angle=False, action_flag=False):
             action = 0
         initial_state = [np.random.normal(loc=0, scale=1.5), np.random.uniform(-10, 10),
                         np.random.uniform(-np.pi, np.pi), np.random.uniform(-15, 15)] #Create random initial state
-        x1 = simulate(initial_state=initial_state, remap__angle=remap__angle, action=action)[1] #Obtain state after one step
+        x1 = simulate(initial_state=initial_state, remap__angle=remap__angle, action=action, noise_frac=noise_frac)[1] #Obtain state after one step
         y = x1 - np.array(initial_state) # y = change in state
         if action_flag:
             initial_state.append(action)
@@ -533,6 +536,7 @@ def plot_y_diff2(initial_state, initial_force, ranges, linear_model=None, nonlin
     Y is the difference between the system's state after one performAction and the initial state!!!
     Four plots are produced.
     If a model is provided, the model's predictions are also plotted (on the same axes)
+    Includes force!!!!
     """
     fig, ((axs1, axs2), (axs3, axs4), (axs5, axs6)) = plt.subplots(3, 2, figsize=figsize)
     for i, axs in enumerate([axs1, axs2, axs3, axs4, axs5]):
