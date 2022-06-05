@@ -4,14 +4,14 @@ import matplotlib.pyplot as plt
 from sklearn import linear_model
 from sklearn.metrics import mean_squared_error as mse
 
-def simulate(steps=1, initial_state=[0, 0, np.pi, 0], action=0, remap__angle=False, noise_frac=0):
+def simulate(steps=1, initial_state=[0, 0, np.pi, 0], action=0, remap__angle=False, noise_frac=0, visual=False):
     """
     Simulate the cartpole system for a number of specificed steps from a specified initial state.
     Returning an array containing all the states (at each step), including the initial state.
     noise = fraction of signal
     Noise can be added to the observed state.
     """
-    cp = CartPole() #Create CartPole object
+    cp = CartPole(visual=visual) #Create CartPole object
     cp.setState(initial_state) #Initialise CartPole object with given initial state
     states = initial_state.copy() #Create copy of initial state array
     
