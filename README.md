@@ -1,5 +1,5 @@
 # cartpole-control
-3rd Year Engineering 'SF3 Machine Learning' project at University of Cambridge (CUED)
+3rd Year Engineering 'Machine Learning' project at University of Cambridge (CUED)
 
 Predicting the dynamics of the cart-pole system by employing linear regression with non-linear Gaussian basis functions (to expand the dimensionality of the input state).
 
